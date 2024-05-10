@@ -392,7 +392,49 @@ class PseudoNumericMarket(Market):
 @define
 class MultipleChoiceMarket(Market):
     answers: List[dict]
+    def outcome_history(self) -> Tuple[Tuple[str, ...], np.ndarray]:
+        assert self.answers is not None
+        outcomes, times = zip(*[(a["text"], a["createdTime"]) for a in self.answers])
+        return outcomes, np.array(times)
 
+    def full_history(self) -> Tuple[np.ndarray, np.ndarray]:
+        assert (
+            self.bets is not None
+        ), "Can't get history. Need to download bet history first."
+        if len(self.bets) == 0:
+            _, itr_probs,itr_times = zip(*sorted([(answer["index"],answer["probability"],answer["createdTime"]) for answer in self.answers]))
+            probabilities=np.array(itr_probs)[:,np.newaxis]
+            times=np.unique(itr_times)
+
+        else:
+            s_bets = sorted(self.bets, key=lambda x: x.createdTime,reverse=True)
+            outcomes, _ = self.outcome_history()
+            start_time=self.createdTime
+            times=np.unique((start_time,*[int(bet.createdTime) for bet in self.bets] ))
+            probabilities=np.empty((len(outcomes) , times.shape[0] ))
+            probabilities.fill(np.nan)
+            initual_prob=np.zeros((len(outcomes) ))
+            id_to_index=dict([(answer["id"],answer["index"]) for answer in self.answers])
+            for bet in s_bets:
+                i=np.argwhere(times == bet.createdTime)[0][0]
+                idx = int(id_to_index[bet.answerId])
+                probabilities[idx, i] = bet.probAfter
+                initual_prob[idx]=bet.probBefore
+            probabilities[:,0]=initual_prob
+            mask = np.isnan(probabilities)
+            idx = np.where(~mask,np.arange(mask.shape[1]),0)
+            _ = np.maximum.accumulate(idx,axis=1, out=idx)
+            probabilities[mask] = probabilities[np.nonzero(mask)[0], idx[mask]]
+
+        return times, probabilities
+
+
+    def probability_history(self) -> Tuple[np.ndarray, np.ndarray]:
+        assert self.resolution is not None
+        id_to_index=dict([(answer["id"],answer["index"]) for answer in self.answers])
+        times, probabilities = self.full_history()
+        resolution = id_to_index[self.resolution]
+        return times, probabilities[resolution]
 
 @define
 class QuadraticFundingMarket(Market):
