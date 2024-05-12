@@ -118,6 +118,7 @@ class Bet:
     isRedemption: Optional[bool] = None
     isAnte: Optional[bool] = None
     userId: Optional[str] = None
+    answerId: Optional[str] = None
 
 
 @define
